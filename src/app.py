@@ -5,19 +5,50 @@ A super simple FastAPI application that allows students to view and sign up
 for extracurricular activities at Mergington High School.
 """
 
+
 from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 import os
 from pathlib import Path
+import json
+import logging
 
 app = FastAPI(title="Mergington High School API",
               description="API for viewing and signing up for extracurricular activities")
 
 # Mount the static files directory
 current_dir = Path(__file__).parent
-app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
-          "static")), name="static")
+app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent, "static")), name="static")
+
+# --- MCP Configuration Loading ---
+mcp_config = None
+mcp_config_error = None
+mcp_config_path = os.path.join(Path(__file__).parent.parent, ".vscode", "mcp.json")
+try:
+    if os.path.exists(mcp_config_path):
+        with open(mcp_config_path) as f:
+            mcp_config = json.load(f)
+        # Basic validation
+        if not isinstance(mcp_config, dict) or "servers" not in mcp_config:
+            mcp_config_error = "Missing 'servers' key in MCP config."
+            logging.error(mcp_config_error)
+        else:
+            logging.info("MCP configuration loaded successfully.")
+    else:
+        mcp_config_error = f"MCP config file not found at {mcp_config_path}"
+        logging.warning(mcp_config_error)
+except Exception as e:
+    mcp_config_error = f"Error loading MCP config: {e}"
+    logging.error(mcp_config_error)
+@app.get("/mcp-config-status")
+def mcp_config_status():
+    """Endpoint to view MCP configuration status for debugging."""
+    if mcp_config_error:
+        return JSONResponse(status_code=500, content={"status": "error", "detail": mcp_config_error})
+    if mcp_config:
+        return {"status": "ok", "config": mcp_config}
+    return JSONResponse(status_code=404, content={"status": "not found"})
 
 # In-memory activity database
 activities = {
